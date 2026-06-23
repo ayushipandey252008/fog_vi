@@ -30,7 +30,23 @@ produces a rich analytics dashboard — all locally, with no database, auth, or 
 4. Tracks objects across frames with ByteTrack and draws boxes + confidence + track id.
 5. **Streams a real-time annotated feed** (MJPEG) so you watch detections live as they happen.
 6. **Flags vehicles that get too close** with a red box + "TOO CLOSE" tag and a danger banner.
-7. Generates a downloadable processed MP4 and a full analytics dashboard.
+7. **Predicts trajectory-based collisions** using ByteTrack vehicle tracks and estimates **Time-To-Collision (TTC)**.
+8. **Surfaces collision risk alerts** with severity-colored boxes, on-box TTC labels, and warning banners.
+9. **Estimates fog density** from frame quality metrics (contrast, blur, edge density).
+10. **Derives visibility range** from fog conditions (metres).
+11. **Computes a dynamic road risk score** (0–10) blending fog, traffic density, proximity alerts, and collision alerts.
+12. **Recommends a safe driving speed** based on fog level and composite risk.
+13. Generates a downloadable processed MP4 and a full analytics dashboard — including collision analytics and **Road Condition Intelligence** metrics.
+
+### Road Condition Intelligence
+
+The results dashboard and aggregate **Dashboard** view include a dedicated analytics
+section powered by `app/pipeline/fog_density.py`:
+
+- **Fog Density** — percentage score (0–100) with level classification (Clear · Moderate · Dense · Severe), sampled from original frames during processing.
+- **Visibility Estimation** — inferred range in metres from fog level (e.g. 200 m clear → 30 m severe).
+- **Risk Score** — composite 0–10 score (Low · Medium · High · Extreme) from fog density, vehicle count, proximity danger frames, and collision alert frames.
+- **Recommended Speed** — safe speed guidance in km/h, reduced further when risk is extreme.
 
 ---
 
@@ -42,13 +58,20 @@ fog/
 │   └── app/
 │       ├── api/         HTTP routes
 │       ├── core/        job manager, device detect, logging
-│       ├── pipeline/    enhancement · detector · annotator · processor
+│       ├── pipeline/    enhancement · detector · collision · fog_density · annotator · processor
 │       └── models/      Pydantic schemas
 ├── frontend/           Next.js 15 · TS · Tailwind · Framer Motion · Recharts
 ├── docs/               ARCHITECTURE.md · API.md · INSTALL.md
 ├── models/             YOLO weights (downloaded at setup)
 ├── uploads/            uploaded source videos
 └── outputs/            processed annotated videos
+```
+
+**Processing pipeline (per job):**
+
+```
+Video → Enhancement → Detection + Tracking → Collision Prediction
+     → Fog Density Estimation → Risk Scoring → Analytics Dashboard
 ```
 
 See **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for the full pipeline diagram.
@@ -165,7 +188,7 @@ The first detection of a session includes a one-time model warm-up (a few second
 > - **Landing** — hero with animated particles and vehicle visualization
 > - **Upload** — drag-and-drop with thumbnail + metadata
 > - **Processing** — progress bar, live frame counter, ETA
-> - **Results** — original vs processed players, charts, before/after slider
+> - **Results** — original vs processed players, collision overlays, Road Condition Intelligence cards, charts, before/after slider
 
 | Screen | Image |
 |--------|-------|
@@ -178,7 +201,14 @@ The first detection of a session includes a one-time model warm-up (a few second
 
 - ⚡ **Real-time detection stream** — annotated frames stream live (MJPEG) the instant you upload
 - 🚨 **Proximity danger alerts** — vehicles that get too close are flagged red with a "TOO CLOSE" warning banner + alert metrics
-- 📊 **Analytics dashboard** (`/dashboard`) — aggregate stats across every processed video
+- 🚗 **Trajectory-based collision prediction** — ByteTrack trajectories forecast intersecting paths
+- ⏱️ **Time-To-Collision (TTC) estimation** — predicted seconds until paths converge
+- ⚠️ **Collision risk alerts and warning banners** — severity-colored boxes, on-box TTC, and top-of-frame warnings
+- 🌫️ **Fog density estimation** — contrast, blur, and edge-density heuristics scored 0–100%
+- 👁️ **Visibility range estimation** — metres inferred from fog level
+- 📊 **Dynamic road risk scoring** — composite 0–10 score from fog, traffic, and alert rates
+- 🛣️ **Recommended safe speed guidance** — km/h cap adjusted for fog and extreme risk
+- 📊 **Analytics dashboard** (`/dashboard`) — aggregate stats across every processed video, including fog density and risk score averages
 - 🎞️ Frame-by-frame detection viewer (scrub the processed video)
 - 📈 Vehicle timeline graph (per-class counts over time, with danger overlay)
 - 📊 Detection confidence distribution chart
