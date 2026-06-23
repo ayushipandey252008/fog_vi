@@ -71,6 +71,12 @@ class Analytics(BaseModel):
     danger_alerts: int = 0       # frames with at least one "too close" vehicle
     danger_vehicles: int = 0     # unique vehicles that entered the danger zone
     max_proximity: float = 0.0   # closest approach (box-height / frame-height)
+    fog_density: float = 0.0
+    fog_level: str = "Clear"
+    visibility_range_m: float = 200.0
+    risk_score: float = 0.0
+    risk_level: str = "Low"
+    recommended_speed_kmh: int = 80
 
 
 class TimelinePoint(BaseModel):
@@ -119,3 +125,5 @@ class HistoryItem(BaseModel):
     average_confidence: float = 0.0
     processing_time_s: float = 0.0
     fps_processed: float = 0.0
+    fog_density: float = 0.0
+    risk_score: float = 0.0

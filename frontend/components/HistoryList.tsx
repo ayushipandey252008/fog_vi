@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Clock, ArrowUpRight, Car } from "lucide-react";
+import { Clock, ArrowUpRight, Car, CloudFog, AlertTriangle } from "lucide-react";
 import type { LocalHistoryItem } from "@/lib/history";
 import { formatDate, formatNumber } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
@@ -59,12 +59,26 @@ export function HistoryList({ items }: { items: LocalHistoryItem[] }) {
               <Clock className="h-3.5 w-3.5" />
               {formatDate(item.created_at)}
             </p>
-            <div className="mt-4 flex items-center justify-between">
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
               <span className="flex items-center gap-1.5 text-sm text-slate-300">
                 <Car className="h-4 w-4 text-accent" />
                 {formatNumber(item.total_vehicles)} vehicles
               </span>
-              <Badge tone={statusTone(item.status)}>{item.status}</Badge>
+              <div className="flex flex-wrap items-center gap-2">
+                {(item.fog_density ?? 0) > 0 && (
+                  <span className="flex items-center gap-1 text-xs text-slate-400">
+                    <CloudFog className="h-3.5 w-3.5" />
+                    {Math.round(item.fog_density ?? 0)}% fog
+                  </span>
+                )}
+                {(item.risk_score ?? 0) > 0 && (
+                  <span className="flex items-center gap-1 text-xs text-danger">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    Risk {(item.risk_score ?? 0).toFixed(1)}
+                  </span>
+                )}
+                <Badge tone={statusTone(item.status)}>{item.status}</Badge>
+              </div>
             </div>
           </Link>
         </motion.div>

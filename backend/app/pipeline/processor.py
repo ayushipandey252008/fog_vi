@@ -18,6 +18,7 @@ from typing import Callable
 import cv2
 import numpy as np
 
+from app.config import get_settings
 from app.core.logging import get_logger
 from app.models.schemas import (
     Analytics,
@@ -27,8 +28,16 @@ from app.models.schemas import (
     TimelinePoint,
 )
 from app.pipeline.annotator import draw_detections
+from app.pipeline.collision import CollisionPredictor
 from app.pipeline.detector import VehicleDetector
 from app.pipeline.enhancement import FogEnhancer
+from app.pipeline.fog_density import (
+    classify_fog_level,
+    compute_risk_score,
+    estimate_fog_density,
+    estimate_visibility_range_m,
+    recommended_speed_kmh,
+)
 
 logger = get_logger(__name__)
 
@@ -60,21 +69,28 @@ class _Accumulator:
     timeline: list[TimelinePoint] = field(default_factory=list)
     danger_frames: int = 0
     danger_track_ids: set[int] = field(default_factory=set)
+    collision_frames: int = 0
+    fog_density_samples: list[float] = field(default_factory=list)
     max_proximity: float = 0.0
 
     def add_frame(self, frame_idx: int, t: float, detections) -> None:
         per_class = {"car": 0, "truck": 0, "bus": 0, "motorcycle": 0}
         danger_in_frame = 0
+        collision_in_frame = False
         for det in detections:
             per_class[det.label] = per_class.get(det.label, 0) + 1
             self.confidences.append(det.conf)
             if det.track_id >= 0:
                 self.counts_by_class.setdefault(det.label, set()).add(det.track_id)
             self.max_proximity = max(self.max_proximity, det.proximity)
+            if det.collision_risk:
+                collision_in_frame = True
             if det.risk == "danger":
                 danger_in_frame += 1
                 if det.track_id >= 0:
                     self.danger_track_ids.add(det.track_id)
+        if collision_in_frame:
+            self.collision_frames += 1
         if danger_in_frame:
             self.danger_frames += 1
         self.timeline.append(
@@ -168,6 +184,7 @@ def run_pipeline(
     progress_cb: ProgressCallback | None = None,
 ) -> PipelineResult:
     """Process ``input_path`` and write the annotated video to ``output_path``."""
+    settings = get_settings()
     cap = _open_capture(input_path)
     fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -188,7 +205,9 @@ def run_pipeline(
 
     enhancer = FogEnhancer(enhancement)
     detector = VehicleDetector(model_name=model_name, conf=conf, device=device)
+    collision = CollisionPredictor(fps=fps)
     acc = _Accumulator()
+    fog_sample_interval = max(1, settings.fog_sample_interval)
 
     before_sample: np.ndarray | None = None
     after_sample: np.ndarray | None = None
@@ -202,6 +221,10 @@ def run_pipeline(
             if not ok:
                 break
 
+            if frame_idx % fog_sample_interval == 0:
+                fog_sample = estimate_fog_density(frame)
+                acc.fog_density_samples.append(fog_sample["fog_density"])
+
             enhanced = enhancer.enhance(frame)
 
             # Capture a representative before/after pair once.
@@ -210,10 +233,11 @@ def run_pipeline(
                 after_sample = enhanced.copy()
 
             detections = detector.detect(enhanced)
+            t = frame_idx / fps if fps else 0.0
+            collision.enrich(detections, t, frame_idx)
             annotated = draw_detections(enhanced, detections)
             writer.write(annotated)
 
-            t = frame_idx / fps if fps else 0.0
             acc.add_frame(frame_idx, t, detections)
 
             frame_idx += 1
@@ -245,9 +269,24 @@ def run_pipeline(
     buses = acc.unique_count("bus")
     motorcycles = acc.unique_count("motorcycle")
     avg_conf = float(np.mean(acc.confidences)) if acc.confidences else 0.0
+    total_vehicles = cars + trucks + buses + motorcycles
+
+    avg_fog_density = (
+        float(np.mean(acc.fog_density_samples)) if acc.fog_density_samples else 0.0
+    )
+    fog_level = classify_fog_level(avg_fog_density)
+    visibility_range_m = estimate_visibility_range_m(fog_level)
+    risk = compute_risk_score(
+        avg_fog_density,
+        total_vehicles,
+        acc.danger_frames,
+        acc.collision_frames,
+        total_frames=frame_idx,
+    )
+    safe_speed = recommended_speed_kmh(fog_level, risk["risk_score"])
 
     analytics = Analytics(
-        total_vehicles=cars + trucks + buses + motorcycles,
+        total_vehicles=total_vehicles,
         cars=cars,
         trucks=trucks,
         buses=buses,
@@ -258,6 +297,12 @@ def run_pipeline(
         danger_alerts=acc.danger_frames,
         danger_vehicles=len(acc.danger_track_ids),
         max_proximity=round(acc.max_proximity, 3),
+        fog_density=round(avg_fog_density, 1),
+        fog_level=fog_level,
+        visibility_range_m=visibility_range_m,
+        risk_score=risk["risk_score"],
+        risk_level=risk["risk_level"],
+        recommended_speed_kmh=safe_speed,
     )
 
     logger.info(

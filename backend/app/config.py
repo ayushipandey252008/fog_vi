@@ -46,6 +46,18 @@ class Settings(BaseSettings):
     danger_ratio: float = 0.5
     caution_ratio: float = 0.32
 
+    # --- Trajectory collision prediction ---------------------------------
+    collision_distance_threshold: float = 80.0  # px between predicted centers
+    collision_horizon_s: float = 3.0
+    collision_min_history: int = 3  # frames before velocity is trusted
+    collision_history_max: int = 30
+    collision_stale_frames: int = 15
+    collision_time_step_s: float = 0.1  # ETA search step size
+    collision_prediction_horizons: tuple[float, float, float] = (1.0, 2.0, 3.0)
+
+    # --- Fog density / road risk -----------------------------------------
+    fog_sample_interval: int = 30  # sample every N frames for fog estimation
+
     # --- Enhancement defaults --------------------------------------------
     enable_clahe: bool = True
     enable_gamma: bool = True

@@ -27,6 +27,8 @@ import {
   Truck,
   ArrowRight,
   LayoutDashboard,
+  CloudFog,
+  AlertTriangle,
 } from "lucide-react";
 import { getHistory, type HistoryItem } from "@/lib/api";
 import { formatDate, formatDuration, formatNumber } from "@/lib/utils";
@@ -35,6 +37,10 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { MetricCard } from "@/components/MetricCard";
 import { ChartShell, chartColors, tooltipStyle } from "@/components/charts/ChartShell";
+import {
+  RoadConditionIntelligence,
+  type RoadConditionMetrics,
+} from "@/components/RoadConditionIntelligence";
 
 interface Totals {
   videos: number;
@@ -46,6 +52,8 @@ interface Totals {
   avgConfidence: number;
   avgFps: number;
   totalTime: number;
+  avgFogDensity: number;
+  avgRiskScore: number;
 }
 
 function aggregate(items: HistoryItem[]): Totals {
@@ -59,11 +67,17 @@ function aggregate(items: HistoryItem[]): Totals {
     avgConfidence: 0,
     avgFps: 0,
     totalTime: 0,
+    avgFogDensity: 0,
+    avgRiskScore: 0,
   };
   let confSum = 0;
   let confCount = 0;
   let fpsSum = 0;
   let fpsCount = 0;
+  let fogSum = 0;
+  let fogCount = 0;
+  let riskSum = 0;
+  let riskCount = 0;
   for (const it of items) {
     t.total += it.total_vehicles ?? 0;
     t.cars += it.cars ?? 0;
@@ -79,9 +93,19 @@ function aggregate(items: HistoryItem[]): Totals {
       fpsSum += it.fps_processed;
       fpsCount += 1;
     }
+    if (it.fog_density != null && it.fog_density > 0) {
+      fogSum += it.fog_density;
+      fogCount += 1;
+    }
+    if (it.risk_score != null && it.risk_score > 0) {
+      riskSum += it.risk_score;
+      riskCount += 1;
+    }
   }
   t.avgConfidence = confCount ? confSum / confCount : 0;
   t.avgFps = fpsCount ? fpsSum / fpsCount : 0;
+  t.avgFogDensity = fogCount ? fogSum / fogCount : 0;
+  t.avgRiskScore = riskCount ? riskSum / riskCount : 0;
   return t;
 }
 
@@ -128,6 +152,8 @@ export function DashboardView() {
   const metrics = [
     { icon: Film, label: "Videos Processed", value: formatNumber(totals.videos), accent: "primary" as const },
     { icon: Layers, label: "Total Vehicles", value: formatNumber(totals.total), accent: "primary" as const },
+    { icon: CloudFog, label: "Avg Fog Density", value: `${totals.avgFogDensity.toFixed(0)}%`, accent: "accent" as const },
+    { icon: AlertTriangle, label: "Avg Risk Score", value: totals.avgRiskScore.toFixed(1), accent: "danger" as const },
     { icon: Car, label: "Cars", value: formatNumber(totals.cars), accent: "primary" as const },
     { icon: Truck, label: "Trucks", value: formatNumber(totals.trucks), accent: "accent" as const },
     { icon: Bus, label: "Buses", value: formatNumber(totals.buses), accent: "success" as const },
@@ -137,6 +163,44 @@ export function DashboardView() {
   ];
 
   const hasData = (items?.length ?? 0) > 0;
+
+  const aggregateRoadMetrics: RoadConditionMetrics | null = useMemo(() => {
+    if (!hasData || totals.avgFogDensity <= 0) return null;
+    const fogLevel =
+      totals.avgFogDensity <= 30
+        ? "Clear"
+        : totals.avgFogDensity <= 60
+        ? "Moderate"
+        : totals.avgFogDensity <= 80
+        ? "Dense"
+        : "Severe";
+    const visibility =
+      fogLevel === "Clear"
+        ? 200
+        : fogLevel === "Moderate"
+        ? 100
+        : fogLevel === "Dense"
+        ? 50
+        : 30;
+    const riskLevel =
+      totals.avgRiskScore <= 3
+        ? "Low"
+        : totals.avgRiskScore <= 6
+        ? "Medium"
+        : totals.avgRiskScore <= 8
+        ? "High"
+        : "Extreme";
+    const speedBase =
+      fogLevel === "Clear" ? 80 : fogLevel === "Moderate" ? 60 : fogLevel === "Dense" ? 40 : 20;
+    return {
+      fog_density: totals.avgFogDensity,
+      fog_level: fogLevel,
+      visibility_range_m: visibility,
+      risk_score: totals.avgRiskScore,
+      risk_level: riskLevel,
+      recommended_speed_kmh: totals.avgRiskScore > 8 ? Math.max(20, speedBase - 20) : speedBase,
+    };
+  }, [hasData, totals]);
 
   return (
     <div className="space-y-10">
@@ -179,6 +243,10 @@ export function DashboardView() {
               <MetricCard key={m.label} index={i} {...m} />
             ))}
           </div>
+
+          {aggregateRoadMetrics && (
+            <RoadConditionIntelligence metrics={aggregateRoadMetrics} compact />
+          )}
 
           {/* charts */}
           <div className="grid gap-6 lg:grid-cols-2">
@@ -242,6 +310,12 @@ export function DashboardView() {
                     <p className="text-xs text-slate-500">{formatDate(it.created_at)}</p>
                   </div>
                   <div className="flex items-center gap-4">
+                    {(it.fog_density ?? 0) > 0 && (
+                      <Badge tone="neutral">{Math.round(it.fog_density ?? 0)}% fog</Badge>
+                    )}
+                    {(it.risk_score ?? 0) > 0 && (
+                      <Badge tone="danger">Risk {(it.risk_score ?? 0).toFixed(1)}</Badge>
+                    )}
                     <Badge tone="accent">{formatNumber(it.total_vehicles)} vehicles</Badge>
                     <Link
                       href={`/app?job=${encodeURIComponent(it.job_id)}`}

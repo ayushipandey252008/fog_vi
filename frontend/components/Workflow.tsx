@@ -82,6 +82,8 @@ export function Workflow() {
       created_at: new Date().toISOString(),
       total_vehicles: res.analytics.total_vehicles,
       status: "completed",
+      fog_density: res.analytics.fog_density,
+      risk_score: res.analytics.risk_score,
     });
   }, [upload?.filename]);
 
@@ -103,6 +105,8 @@ export function Workflow() {
           created_at: new Date().toISOString(),
           total_vehicles: res.analytics.total_vehicles,
           status: "completed",
+          fog_density: res.analytics.fog_density,
+          risk_score: res.analytics.risk_score,
         });
       } catch (err) {
         if (cancelled) return;

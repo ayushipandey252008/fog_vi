@@ -26,6 +26,10 @@ import { ConfidenceChart } from "@/components/charts/ConfidenceChart";
 import { TimelineChart } from "@/components/charts/TimelineChart";
 import { BeforeAfterSlider } from "@/components/BeforeAfterSlider";
 import { FrameViewer } from "@/components/FrameViewer";
+import {
+  RoadConditionIntelligence,
+  roadMetricsFromAnalytics,
+} from "@/components/RoadConditionIntelligence";
 
 interface Props {
   results: ResultsResponse;
@@ -128,6 +132,8 @@ export function ResultsView({ results, fps, onReset }: Props) {
           </div>
         </motion.div>
       )}
+
+      <RoadConditionIntelligence metrics={roadMetricsFromAnalytics(a)} />
 
       {/* video players */}
       <div className="grid gap-6 lg:grid-cols-2">

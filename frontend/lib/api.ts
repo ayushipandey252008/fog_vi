@@ -79,6 +79,12 @@ export interface Analytics {
   danger_alerts: number;
   danger_vehicles: number;
   max_proximity: number;
+  fog_density: number;
+  fog_level: string;
+  visibility_range_m: number;
+  risk_score: number;
+  risk_level: string;
+  recommended_speed_kmh: number;
 }
 
 export interface TimelinePoint {
@@ -126,6 +132,8 @@ export interface HistoryItem {
   average_confidence?: number;
   processing_time_s?: number;
   fps_processed?: number;
+  fog_density?: number;
+  risk_score?: number;
 }
 
 // ---------------------------------------------------------------------------

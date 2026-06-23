@@ -296,6 +296,8 @@ class JobManager:
                     "average_confidence": analytics.get("average_confidence", 0.0),
                     "processing_time_s": analytics.get("processing_time_s", 0.0),
                     "fps_processed": analytics.get("fps_processed", 0.0),
+                    "fog_density": analytics.get("fog_density", 0.0),
+                    "risk_score": analytics.get("risk_score", 0.0),
                 }
             )
         items.sort(key=lambda x: x["created_at"], reverse=True)
